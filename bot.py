@@ -2,10 +2,11 @@ import sqlite3
 import telebot
 from telebot import types
 from keyboa.keyboards import keyboa_maker, keyboa_combiner
+from bs4 import BeautifulSoup
 import requests
 
 
-BOT_TOKEN = '% your_bot_token %'
+BOT_TOKEN = '<TOKEN>'
 bot = telebot.TeleBot(BOT_TOKEN)
 
 
@@ -36,15 +37,18 @@ def get_ekb_attractions():
     if data.status_code == 200:
         pages_cnt = data.json()['count'] // parameters['page_size'] + 1
         for i in range(1, pages_cnt + 1):
-            parameters['page'] = i
-            parameters['fields'] = ','.join(
-                ['id', 'title', 'address', 'images', 'site_url', 'foreign_url']
-            )
+            parameters.update({
+                'page': i,
+                'fields': ','.join(
+                    ['id', 'title', 'address', 'images', 'description', 'site_url', 'foreign_url']
+                )
+            })
 
             page_data = requests.get(kudago_api, params=parameters)
             for place in page_data.json()['results']:
                 space = place['title'].find(' ')
-                place['title'] = f"{place['title'][:space].title()}{place['title'][space:]}"
+                if space != -1:
+                    place['title'] = f"{place['title'][:space].title()}{place['title'][space:]}"
                 result[place['id']] = place
 
     return result
@@ -98,19 +102,27 @@ def send_previous_buttons_page(call):
 
 def send_place_info(call):
     place = attractions[int(call.data)]
-    images = [types.InputMediaPhoto(image['image']) for image in attractions[int(call.data)]['images']]
+
+    description = BeautifulSoup(place['description'], "lxml").text
 
     if place['foreign_url']:
-        url = (f"{place['foreign_url']} (Может быть устаревшей)\n"
-               f"{place['site_url']}")
+        url = (f"Ссылки:\n"
+               f"{place['site_url']}\n"
+               f"({place['foreign_url']}, может быть устаревшей)")
     else:
-        url = place['site_url']
+        url = f"Ссылка: {place['site_url']}"
 
-    images[-1].caption = (f"{place['title']}\n\n"
-                          f"Адрес: {place['address']}\n\n"
-                          f"Ссылки:\n{url}")
+    message = (f"{place['title']}\n\n"
+               f"{description}\n"
+               f"Адрес: {place['address']}\n"
+               f"{url}")
 
-    bot.send_media_group(chat_id=call.from_user.id, media=images)
+    if place['images'][0]['source']['name']:
+        images = [types.InputMediaPhoto(image['image']) for image in attractions[int(call.data)]['images']]
+        images[-1].caption = message
+        bot.send_media_group(chat_id=call.from_user.id, media=images)
+    else:
+        bot.send_message(chat_id=call.from_user.id, text=message, disable_web_page_preview=True)
 
 
 @bot.message_handler(commands=['start'])
