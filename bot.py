@@ -176,6 +176,6 @@ def callback(call):
 
 if __name__ == '__main__':
     attractions = get_ekb_attractions()
-    button_pages = get_button_pages(buttons_per_page=7)
+    button_pages = get_button_pages(buttons_per_page=8)
 
     bot.polling(none_stop=True, interval=0)
